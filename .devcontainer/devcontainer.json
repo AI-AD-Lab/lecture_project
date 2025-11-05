@@ -1,0 +1,19 @@
+{
+  "name": "sam-dev",
+  "build": {
+    "dockerfile": "../Dockerfile"
+  },
+  "runArgs": ["--gpus", "all"],
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-toolsai.jupyter",
+        "ms-azuretools.vscode-docker"
+      ]
+    }
+  },
+  "remoteUser": "root"
+}

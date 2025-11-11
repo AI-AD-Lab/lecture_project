@@ -23,12 +23,12 @@ class ConvModule(nn.Module):
 class SAMAggregatorNeck(nn.Module):
     def __init__(
             self,
-            in_channels=[1280]*32,          
+            in_channels=[1280]*32,
             # in_channels=[384]*12,       #vits
             # in_channels=[192]*12,       #vitt
             # in_channels=[384]*12,          #vits_rellis_3d
-            inner_channels=128,    
-            selected_channels = range(1, 12, 1),        
+            inner_channels=128,
+            selected_channels = range(1, 12, 1),
             out_channels=256,
             up_sample_scale=4,
     ):
@@ -137,12 +137,12 @@ class SAMAggregatorNeck(nn.Module):
             nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         )
 
-    
+
 
     def forward(self, inputs):
-        image_embedding, inner_states = inputs        
+        image_embedding, inner_states = inputs
         ######################
-      
+
         inner_states = [einops.rearrange(inner_states[idx], 'b h w c -> b c h w') for idx in self.selected_channels]
         inner_states = [layer(x) for layer, x in zip(self.down_sample_layers, inner_states)]
 
@@ -180,14 +180,28 @@ class MLP(nn.Module):
 
 
 
-
-
 class SegHead(nn.Module):
-    def __init__(self,):
+    def __init__(self, sam_variant: str = 'vit_h'):
         super(SegHead, self).__init__()
         self.in_channels = [256, 256, 256, 256]
 
         c1_in_channels, c2_in_channels, c3_in_channels, c4_in_channels = self.in_channels
+
+        variant2ch = {
+            'vitt': 192, 'vits': 384,
+            'vit_b': 768, 'vit_l': 1024, 'vit_h': 1280
+        }
+
+        variant2depth = {
+            'vitt': 12, 'vits': 12,  # efficient-sam 계열은 보통 12 근처(필요시 조정)
+            'vit_b': 12, 'vit_l': 24, 'vit_h': 32
+        }
+
+        if sam_variant not in variant2ch:
+            raise ValueError(f"Unknown sam_variant: {sam_variant}")
+
+        sam_embed_ch = variant2ch[sam_variant]
+        depth = variant2depth[sam_variant]
 
         embedding_dim = 256
 
@@ -201,12 +215,23 @@ class SegHead(nn.Module):
             out_ch=embedding_dim,
             kernel_size=1,
         )
-        
+        def last4_even_indices(d):
+            # even 인덱스(2,4,...,d-2) 중 끝에서 4개
+            evens = list(range(2, d, 2))
+            return evens[-4:]
+
+        selected = last4_even_indices(depth)
+
+        self.neck_net = SAMAggregatorNeck(
+            in_channels=[sam_embed_ch] * 24,
+            selected_channels=selected
+        )
+
         ### sam_l
         # self.neck_net = SAMAggregatorNeck(in_channels=[1024]*24, selected_channels = range(4, 24, 2))
 
         ### sam_h
-        self.neck_net = SAMAggregatorNeck()
+        # self.neck_net = SAMAggregatorNeck()
 
 
 
@@ -268,7 +293,7 @@ class SegHeadUpConv(nn.Module):
 
     def forward(self, inputs):
         # image_embedding, inner_states = inputs
-        image_embedding = inputs 
+        image_embedding = inputs
         x = self.UpConv(image_embedding)
         x = self.seg_head(x)
 

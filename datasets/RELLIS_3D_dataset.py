@@ -55,7 +55,7 @@ class RELLIS3DDataset(data.Dataset):
         }
         tolerance = 2
 
-        # 进行颜色近似匹配
+        # Color Approximation Matching
         mapped_label = np.zeros_like(rgb_color)
         for target_color in passable_colors:
             condition = np.all(np.abs(rgb_color - target_color) <= tolerance, axis=-1)

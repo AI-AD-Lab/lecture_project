@@ -43,12 +43,6 @@ def build_sam_vit_b(checkpoint=None):
         checkpoint=checkpoint,
     )
 
-'''
-vit_h = 1280
-vit_l = 1024
-vit_b = 768
-
-'''
 
 sam_model_registry = {
     "default": build_sam_vit_h,

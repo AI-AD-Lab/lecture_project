@@ -14,7 +14,6 @@ from typing import Any, Dict, List, Tuple
 
 import zipfile
 
-
 from seg_decoder import SegHead, SegHeadUpConv
 from segment_anything.utils.transforms import ResizeLongestSide
 from torch.nn import functional as F
@@ -110,7 +109,7 @@ def main():
     efficientsam.to(device)
 
     # 여기 SegHead 모델의 가중치에 대한 정보가 없음 --> 우리가 학습시킨 가중치를 사용해야 함
-    seg_decoder = SegHead()
+    seg_decoder = SegHead(sam_variant='vit_h')
     # ckpt_path = 'ckpts/orfd/best_epoch.pth'
     # seg_decoder.load_state_dict(torch.load(ckpt_path, map_location='cpu'))
     seg_decoder.eval()

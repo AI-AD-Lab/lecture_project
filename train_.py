@@ -12,9 +12,6 @@ import matplotlib.pyplot as plt
 # from typing import Any, Dict, List
 from typing import Any, Dict, List, Tuple
 
-import zipfile
-
-
 from seg_decoder import SegHead, SegHeadUpConv
 from segment_anything.utils.transforms import ResizeLongestSide
 from torch.nn import functional as F

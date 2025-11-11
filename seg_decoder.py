@@ -223,7 +223,7 @@ class SegHead(nn.Module):
         selected = last4_even_indices(depth)
 
         self.neck_net = SAMAggregatorNeck(
-            in_channels=[sam_embed_ch] * 24,
+            in_channels=[sam_embed_ch] * depth,
             selected_channels=selected
         )
 

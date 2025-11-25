@@ -1,0 +1,1 @@
+docker run --gpus all -it --name sam-dev -v $(pwd):/workspace  sam-dev  /bin/bash

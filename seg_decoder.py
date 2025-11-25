@@ -161,8 +161,6 @@ class SAMAggregatorNeck(nn.Module):
         return img_feats_2, img_feats_1, img_feats_0, image_embedding
 
 
-
-
 class MLP(nn.Module):
     """
     Linear Embedding
@@ -232,8 +230,6 @@ class SegHead(nn.Module):
 
         ### sam_h
         # self.neck_net = SAMAggregatorNeck()
-
-
 
         self.linear_pred = nn.Conv2d(embedding_dim, 2, kernel_size=1)
 

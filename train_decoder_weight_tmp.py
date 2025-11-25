@@ -15,18 +15,6 @@ from datasets.RELLIS_3D_dataset import RELLIS3DDataset
 
 # *주의: 실제 환경에서는 위의 주석을 해제하고 경로를 맞추세요.*
 
-# 임시 정의 (실제 코드로 대체 필요)
-class SegHead(nn.Module):
-    def __init__(self):
-        super().__init__()
-        # SAMAggregatorNeck과 SegHead를 통합한 간소화된 구조
-        self.conv = nn.Conv2d(1280, 2, kernel_size=1) 
-    def forward(self, inputs):
-        # ImageEncoderViT의 튜플 출력을 받음: (final_embedding, inner_states)
-        final_embedding, inner_states = inputs
-        # SegHead의 최종 출력을 256x256 로짓으로 가정
-        return F.interpolate(self.conv(final_embedding), size=(256, 256), mode='bilinear', align_corners=False)
-
 class ImageEncoderViT(nn.Module):
     def __init__(self):
         super().__init__()

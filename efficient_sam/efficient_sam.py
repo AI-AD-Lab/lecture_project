@@ -306,6 +306,6 @@ def build_efficient_sam(encoder_patch_embed_dim, encoder_num_heads, checkpoint=N
     )
     if checkpoint is not None:
         with open(checkpoint, "rb") as f:
-            state_dict = torch.load(f, map_location="cpu")
+            state_dict = torch.load(f, map_location="cpu", weights_only=True)
         sam.load_state_dict(state_dict["model"])
     return sam

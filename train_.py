@@ -1,6 +1,7 @@
 import cv2  # type: ignore
 
 from segment_anything import sam_model_registry
+from tqdm import tqdm
 
 import numpy as np
 import torch
@@ -137,27 +138,23 @@ def train_orfd(
     device,
     epochs=100,
     lr = 1e-4,
-    batch_size=4,
-    num_workers=4,
-    val_every=1,
+    # batch_size=4,
+    # num_workers=4,
+    # val_every=1,
     model_type_name='vits'
 ):
+
+    phases = [
+        'training', 
+        'testing', 
+        'validation'
+    ]
+
+
     # Dataset / Loader
-    train_ds = ORFDDataset(dataset_root, mode='training')
-    test_ds = ORFDDataset(dataset_root, mode='testing')
-    val_ds   = ORFDDataset(dataset_root, mode='validation')
-
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True,
-                              num_workers=num_workers, pin_memory=True, drop_last=True)
-    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=True,
-                              num_workers=num_workers, pin_memory=True, drop_last=True)
-    val_loader   = DataLoader(val_ds, batch_size=batch_size, shuffle=False,
-                              num_workers=num_workers, pin_memory=True)
-
-    dataset_loader = {'train':train_loader,
-                      'test':test_loader,
-                      'validation':val_loader
-                    }
+    dataset = { phase:ORFDDataset(dataset_root, mode=phase) for phase in phases}
+    dataset_loader = { phase:DataLoader(dataset[phase], batch_size=1, shuffle=True,
+                              num_workers=1, drop_last=True) for phase in phases}
 
     # 모델(이미 존재한다고 가정)
     # efficientsam, seg_decoder, preprocess, transform 은 사용자 코드에서 그대로 사용
@@ -168,23 +165,111 @@ def train_orfd(
     # params = list(efficientsam.parameters()) + list(seg_decoder.parameters())
     #seg_decoder만 학습
     optimizer = torch.optim.AdamW(seg_decoder.parameters(), lr=lr, weight_decay=1e-3)
-    total_steps = len(dataset_loader['train']) * epochs
+    total_steps = len(dataset_loader['training']) * epochs
     scheduler = build_poly_scheduler(optimizer, total_steps, power=0.9)
-    best_val_iou = 0.0
     transform = ResizeLongestSide(1024)
 
+
+
     print(f'Train {model_type_name}')
+
+    current_loss = {phase:100000.0 for phase in phases}
+
+    best_pahse_loss = {phase:100000.0 for phase in phases}
+
+    mIoU = {phase:[] for phase in phases}
+
+    best_iou = 0.0
+    val_best_iou = 0.0
+
+
+    early_stop_count = 0
     for epoch in range(1, epochs+1):
         print(f'processing: {epoch}/{epochs+1}')
-        seg_decoder.train()
-        t0 = time.time()
+
+        for phase in ['training', 'testing']:
+            print(f'{phase} in progress')
+            running_loss = 0.0
+            iou_list = []
+            for imgs, gts, _ in tqdm(dataset_loader[phase]):
+                if phase == 'training':
+                    seg_decoder.train()
+                else:
+                    seg_decoder.eval()
+
+                # DataLoader가 batch_size=1일 때 rgb_image[0] 꺼내기
+                rgb_image = imgs[0].numpy() if isinstance(imgs, torch.Tensor) else imgs
+                gt = gts[0].numpy() if isinstance(gts, torch.Tensor) else gts
+
+                # vits 기준 -> gb_image.shape => (720, 1280, 3), gt.shape=> (720, 1280) (세로, 가로, 채널)
+
+                # 원본 크기
+                ori_size = rgb_image.shape[:2] # (720, 1280)
+                # transform 적용
+                input_image = transform.apply_image(rgb_image)
+                input_size = input_image.shape[:2] # (720,1280) -> (576,1024)로 변환 ResizeLongestSide(1024)
+
+                # torch 텐서 변환 [1, 3, 576, 1024] -> [1, 3, 1024, 1024]
+                input_image_torch = torch.as_tensor(input_image).permute(2, 0, 1).contiguous()[None, :, :, :]
+                input_image_torch = preprocess(input_image_torch).to(device)
+
+                with torch.no_grad():
+                    image_embedding = sam_model.image_encoder(input_image_torch)
+
+                # decoder는 학습 대상 (grad 계산 O)
+                pred_mask = seg_decoder(image_embedding) # [1, 2, 256, 256] 반환
+                pred_mask = postprocess_masks(pred_mask, input_size, ori_size) # [1, 2, 720, 1280] 반환 -> 원본크기의 2채널
+
+                if pred_mask.shape[-2:] != gt.shape[-2:]: # 예측 마스크 크기와 gt_image 크기 비교
+                    pred_mask = torch.nn.functional.interpolate(
+                        pred_mask, size=gt.shape[-2:], mode='bilinear', align_corners=False
+                    )
+
+                # ✅ 타깃 텐서 변환 (720, 1280) -> (1, 720, 1280)
+                gt = torch.as_tensor(gt, dtype=torch.long, device=pred_mask.device)
+                if gt.ndim == 2:
+                    gt = gt.unsqueeze(0)  # [1, H, W] 형태로 맞춤
+
+                # 🔥 0~255 → 0~1로 변환
+                if gt.max() > 1:
+                    gt = (gt > 127).long()
+
+                loss = torch.nn.functional.cross_entropy(pred_mask, gt)
+                if phase == 'training':
+                    optimizer.zero_grad()
+                    loss.backward()
+                    optimizer.step()
+                    scheduler.step()
+
+                running_loss += loss.item() * gt.size(0)
+
+                # IoU 계산
+                preds = torch.softmax(pred_mask, dim=1).argmax(dim=1) 
+                iou_list.append(binary_iou(preds, gt))
+
+            mean_loss = running_loss / len(dataset_loader[phase].dataset)
+            current_loss[phase] = mean_loss
+            phase_miou = np.mean(iou_list) if iou_list else 0.0
+
+            # loss[phase].append(phase_loss)
+            # mIoU[phase].append(phase_miou)
+
+        if best_pahse_loss['testing'] < current_loss['testing']:
+            early_stop_count += 1
+            if early_stop_count > 10:
+                print('early stop activated')
+                break
+            continue
+        
+        early_stop_count = 0        
+        best_pahse_loss['testing'] = current_loss['testing']
         running_loss = 0.0
-        for imgs, gts, _ in dataset_loader['train']:
+        iou_list = []
+        for imgs, gts, _ in dataset_loader['validation']:
+            seg_decoder.eval()
             # DataLoader가 batch_size=1일 때 rgb_image[0] 꺼내기
             rgb_image = imgs[0].numpy() if isinstance(imgs, torch.Tensor) else imgs
             gt = gts[0].numpy() if isinstance(gts, torch.Tensor) else gts
-
-            # vits 기준 -> gb_image.shape => (720, 1280, 3), gt.shape=> (720, 1280) (세로, 가로, 채널)
 
             # 원본 크기
             ori_size = rgb_image.shape[:2] # (720, 1280)
@@ -198,15 +283,6 @@ def train_orfd(
 
             with torch.no_grad():
                 image_embedding = sam_model.image_encoder(input_image_torch)
-
-            '''
-            vits -> embeddings => 
-            [ [1, 256, 64, 64],  -> [0]은 1개 존재
-              [[1, 64, 64, 384], -> [1][0]
-              [1, 64, 64, 384]],  -> [1][1]
-              , ....               -> [1]에 12개 존재
-            ]
-            '''
 
             # decoder는 학습 대상 (grad 계산 O)
             pred_mask = seg_decoder(image_embedding) # [1, 2, 256, 256] 반환
@@ -226,109 +302,128 @@ def train_orfd(
             if gt.max() > 1:
                 gt = (gt > 127).long()
 
-            
             loss = torch.nn.functional.cross_entropy(pred_mask, gt)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            scheduler.step()
-
             running_loss += loss.item() * gt.size(0)
 
+            # IoU 계산
+            preds = torch.softmax(pred_mask, dim=1).argmax(dim=1) 
+            iou_list.append(binary_iou(preds, gt))
+
+        phase_loss = running_loss / len(dataset_loader['validation'].dataset)
+        current_loss['validation'] = phase_loss
+
+        phase_miou = np.mean(iou_list) if iou_list else 0.0
+
+        # loss[phase].append(phase_loss)
+        # mIoU[phase].append(phase_miou)
+
+        if current_loss['validation'] < best_pahse_loss['validation']:
+            best_pahse_loss['validation'] = current_loss['validation']
+
+            ckpt = {
+                "epoch": epoch,
+                # "efficientsam": sam_model.state_dict(),
+                "seg_decoder": seg_decoder.state_dict(),
+                # "optimizer": optimizer.state_dict(),
+                # "best_val_iou": val_best_iou,
+            }
+            
+            os.makedirs("ckpts_val", exist_ok=True)
+            torch.save(ckpt, f"ckpts/best_{model_type_name}_251203.pth")
+            print(f" {model_type_name} -> New best mIoU {val_best_iou}. checkpoint saved.")
 
 
-        train_loss = running_loss / len(train_loader.dataset)
-        dt = time.time() - t0
 
-        # ====== Validation ======
 
-        if (epoch % val_every) == 0: 
-            print(f'Test {model_type_name}')
-            seg_decoder.eval()
-            val_loss = 0.0
-            val_iou_list = []
+        # # ====== Validation ======
 
-            with torch.no_grad():
-                for imgs, gts, _ in dataset_loader['validation']:
-                    rgb_image = imgs[0].numpy() if isinstance(imgs, torch.Tensor) else imgs
-                    gt = gts[0].numpy() if isinstance(gts, torch.Tensor) else gts
+        # if (epoch % val_every) == 0: 
+        #     print(f'Test {model_type_name}')
+        #     seg_decoder.eval()
+        #     val_loss = 0.0
+        #     val_iou_list = []
 
-                    # 원본 크기
-                    ori_size = rgb_image.shape[:2] # (720, 1280)
-                    # transform 적용
-                    input_image = transform.apply_image(rgb_image)
-                    input_size = input_image.shape[:2] # (720,1280) -> (576,1024)로 변환 ResizeLongestSide(1024)
+        #     with torch.no_grad():
+        #         for imgs, gts, _ in dataset_loader['validation']:
+        #             rgb_image = imgs[0].numpy() if isinstance(imgs, torch.Tensor) else imgs
+        #             gt = gts[0].numpy() if isinstance(gts, torch.Tensor) else gts
 
-                    # torch 텐서 변환 [1, 3, 576, 1024] -> [1, 3, 1024, 1024]
-                    input_image_torch = torch.as_tensor(input_image).permute(2, 0, 1).contiguous()[None, :, :, :]
-                    input_image_torch = preprocess(input_image_torch).to(device)
+        #             # 원본 크기
+        #             ori_size = rgb_image.shape[:2] # (720, 1280)
+        #             # transform 적용
+        #             input_image = transform.apply_image(rgb_image)
+        #             input_size = input_image.shape[:2] # (720,1280) -> (576,1024)로 변환 ResizeLongestSide(1024)
 
-                    image_embedding = sam_model.image_encoder(input_image_torch)
+        #             # torch 텐서 변환 [1, 3, 576, 1024] -> [1, 3, 1024, 1024]
+        #             input_image_torch = torch.as_tensor(input_image).permute(2, 0, 1).contiguous()[None, :, :, :]
+        #             input_image_torch = preprocess(input_image_torch).to(device)
 
-                    # decoder는 학습 대상 (grad 계산 O)
-                    pred_mask = seg_decoder(image_embedding) # [1, 2, 256, 256] 반환
-                    pred_mask = postprocess_masks(pred_mask, input_size, ori_size) # [1, 2, 720, 1280] 반환 -> 원본크기의 2채널
+        #             image_embedding = sam_model.image_encoder(input_image_torch)
 
-                    if pred_mask.shape[-2:] != gt.shape[-2:]: # 예측 마스크 크기와 gt_image 크기 비교
-                        pred_mask = torch.nn.functional.interpolate(
-                            pred_mask, size=gt.shape[-2:], mode='bilinear', align_corners=False
-                        )
+        #             # decoder는 학습 대상 (grad 계산 O)
+        #             pred_mask = seg_decoder(image_embedding) # [1, 2, 256, 256] 반환
+        #             pred_mask = postprocess_masks(pred_mask, input_size, ori_size) # [1, 2, 720, 1280] 반환 -> 원본크기의 2채널
 
-                    # ✅ 타깃 텐서 변환 (720, 1280) -> (1, 720, 1280)
-                    gt = torch.as_tensor(gt, dtype=torch.long, device=pred_mask.device)
-                    if gt.ndim == 2:
-                        gt = gt.unsqueeze(0)  # [1, H, W] 형태로 맞춤
+        #             if pred_mask.shape[-2:] != gt.shape[-2:]: # 예측 마스크 크기와 gt_image 크기 비교
+        #                 pred_mask = torch.nn.functional.interpolate(
+        #                     pred_mask, size=gt.shape[-2:], mode='bilinear', align_corners=False
+        #                 )
 
-                    # 🔥 0~255 → 0~1로 변환
-                    if gt.max() > 1:
-                        gt = (gt > 127).long()
+        #             # ✅ 타깃 텐서 변환 (720, 1280) -> (1, 720, 1280)
+        #             gt = torch.as_tensor(gt, dtype=torch.long, device=pred_mask.device)
+        #             if gt.ndim == 2:
+        #                 gt = gt.unsqueeze(0)  # [1, H, W] 형태로 맞춤
+
+        #             # 🔥 0~255 → 0~1로 변환
+        #             if gt.max() > 1:
+        #                 gt = (gt > 127).long()
 
                     
-                    loss = torch.nn.functional.cross_entropy(pred_mask, gt)
+        #             loss = torch.nn.functional.cross_entropy(pred_mask, gt)
 
-                    running_loss += loss.item() * gt.size(0)
+        #             running_loss += loss.item() * gt.size(0)
 
-                    # IoU 계산
-                    preds = torch.softmax(pred_mask, dim=1).argmax(dim=1)  # [B,H,W] 0/1
-                    val_iou_list.append(binary_iou(preds, gt))
+        #             # IoU 계산
+        #             preds = torch.softmax(pred_mask, dim=1).argmax(dim=1)  # [B,H,W] 0/1
+        #             val_iou_list.append(binary_iou(preds, gt))
 
-            val_loss = running_loss  / len(val_loader.dataset)
-            mean_iou = np.mean(val_iou_list) if val_iou_list else 0.0
+        #     val_loss = running_loss  / len(val_loader.dataset)
+        #     mean_iou = np.mean(val_iou_list) if val_iou_list else 0.0
 
-            print(f"[Epoch {epoch:03d}] "
-                  f"train_loss={train_loss:.4f}  val_loss={val_loss:.4f}  mIoU={mean_iou:.4f}  ({dt:.1f}s)")
+        #     print(f"[Epoch {epoch:03d}] "
+        #           f"train_loss={train_loss:.4f}  val_loss={val_loss:.4f}  mIoU={mean_iou:.4f}  ({dt:.1f}s)")
 
-            # 체크포인트 저장
-            if mean_iou > best_val_iou:
-                best_val_iou = mean_iou
-                ckpt = {
-                    "epoch": epoch,
-                    "efficientsam": sam_model.state_dict(),
-                    "seg_decoder": seg_decoder.state_dict(),
-                    "optimizer": optimizer.state_dict(),
-                    "best_val_iou": best_val_iou,
-                }
-                os.makedirs("ckpts", exist_ok=True)
-                torch.save(ckpt, f"ckpts/best_{model_type_name}_1118.pth")
-                print(f"  -> New best mIoU. checkpoint saved.")
+        #     # 체크포인트 저장
+        #     if mean_iou > train_best_iou:
+        #         train_best_iou = mean_iou
+        #         ckpt = {
+        #             "epoch": epoch,
+        #             "efficientsam": sam_model.state_dict(),
+        #             "seg_decoder": seg_decoder.state_dict(),
+        #             "optimizer": optimizer.state_dict(),
+        #             "best_val_iou": train_best_iou,
+        #         }
+        #         os.makedirs("ckpts", exist_ok=True)
+        #         torch.save(ckpt, f"ckpts/best_{model_type_name}_1118.pth")
+        #         print(f"  -> New best mIoU. checkpoint saved.")
 
         
-    print("Training done.")
-    del sam_model
-    del seg_decoder
-    del optimizer
-    del loss
-    gc.collect()
-    torch.cuda.empty_cache()
-    print("GPU memory cleared.")
+    # print("Training done.")
+    # del sam_model
+    # del seg_decoder
+    # del optimizer
+    # del loss
+    # gc.collect()
+    # torch.cuda.empty_cache()
+    # print("GPU memory cleared.")
 
 def main():
 
     model_types = [
-        'vit_h',
-        'vit_l', 
-        'vit_b',
-        'vits', 
+        # 'vit_h',
+        # 'vit_l', 
+        # 'vit_b',
+        # 'vits', 
         'vitt'
     ]
     device = torch.device("cuda:0")
@@ -362,10 +457,10 @@ def main():
             sam_model=sam_model,
             seg_decoder=seg_decoder,
             device = device,
-            epochs= 10,
-            batch_size=1,
-            num_workers=1,
-            val_every=2,
+            epochs= 30,
+            # batch_size=1,
+            # num_workers=1,
+            # val_every=2,
             model_type_name = model_type
         )
 

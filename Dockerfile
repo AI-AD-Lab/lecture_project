@@ -25,7 +25,7 @@ WORKDIR /workspace/segment-anything
 
 # SAM requirements 설치
 RUN pip install -e .
-RUN pip install opencv-python pycocotools matplotlib onnxruntime onnx einops
+RUN pip install opencv-python pycocotools matplotlib onnxruntime onnx einops tqdm
 
 # 기본 Python 환경 확인용
 RUN python3 -c "import torch, torchvision; print('PyTorch:', torch.__version__, 'TorchVision:', torchvision.__version__, 'CUDA available:', torch.cuda.is_available())"

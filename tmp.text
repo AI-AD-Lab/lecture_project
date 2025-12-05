@@ -1,1 +1,32 @@
 docker run --gpus all -it --name sam-dev -v $(pwd):/workspace  sam-dev  /bin/bash
+
+
+adapive patch no training
+Result:1.2761083562929467, Mean IOU:0.1798713339900892
+
+vits
+Result:0.2266345108010204, Mean IOU:0.8094880162951458
+
+
+val data len: 1245
+model_name=vit_h Phase=validation val_loss=0.3561  mIoU=0.7900  (402.4s)
+model_name=vit_l Phase=validation val_loss=0.2153  mIoU=0.8362  (255.1s)
+model_name=vit_b Phase=validation val_loss=0.4217  mIoU=0.7851  (125.7s)
+model_name=vits Phase=validation val_loss=0.3662  mIoU=0.7858  (100.8s)
+model_name=vitt Phase=validation val_loss=0.4579  mIoU=0.8031  (62.6s)
+
+
+
+
+
+
+------------------------------------------------------------
+vitt - last train epoch(30)
+TRAIN || Loss - 0.007320320936273011, mIoU - 0.9919738318234881
+TEST || Loss - 0.5167879357537347, mIoU - 0.9182885541417966
+VAL || Loss - 1.3187689313448099, mIoU - 0.746185811240989
+
+vitt - best result epoch(5)
+TRAIN || Loss - 0.021857555717740562, mIoU - 0.9757094834536115
+TEST || Loss - 0.172341336246038, mIoU - 0.9094273466744273
+VAL || Loss - 0.33283126773724114, mIoU - 0.8120531985558659

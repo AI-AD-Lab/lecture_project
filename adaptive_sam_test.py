@@ -16,17 +16,18 @@ from seg_decoder import SegHead, SegHeadUpConv
 from segment_anything.utils.transforms import ResizeLongestSide
 from torch.nn import functional as F
 
-import torch, gc
+import torch
 import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 
-from efficient_sam.build_efficient_sam import build_efficient_sam_vitt, build_efficient_sam_vits
+from efficient_sam_adaptive_patch.build_efficient_sam import build_efficient_sam_vitt, build_efficient_sam_vits
 from torchvision import transforms
     
 from dataloader import ORFDDataset
 from torch.utils.data import DataLoader
 from pathlib import Path
+
 
 def show_anns(anns):
     if len(anns) == 0:
@@ -131,93 +132,78 @@ def binary_iou(pred_mask, target):
     union = (pred_mask | target).sum(dim=(1,2)).float().clamp_min(1.0)
     return (inter / union).mean().item()
 
+
 def save_pred_image(pred_mask, save_path):
     pred = torch.softmax(pred_mask, dim=1).argmax(dim=1)  # [1, 720, 1280]
     pred = pred[0].detach().cpu().numpy().astype(np.uint8)
     cv2.imwrite(save_path, pred * 255)
 
-def save_overlay_image(rgb_image, pred_mask, save_path, color=(0, 0, 255), alpha=0.5):
-    """
-    rgb_image: 원본 RGB 이미지 (H, W, 3)
-    pred_mask: [1, 2, H, W] or [2, H, W] tensor
-    save_path: 저장 경로 (str or Path)
-    color: 덮어쓸 색 (BGR) - 기본 빨강
-    alpha: 투명도 (0~1)
-    """
+# def save_pred_image(pred_mask, save_path):
+#     """
+#     pred_mask: [1, 2, H, W] tensor
+#     save_path: Path object or string
+#     """
+#     # softmax 후 argmax -> [H, W] (0 or 1)
+#     pred = torch.softmax(pred_mask, dim=1).argmax(dim=1).squeeze(0).cpu().numpy()
 
-    # 1) 소프트맥스 → argmax로 이진 마스크 생성
-    if pred_mask.dim() == 4:
-        pred = torch.softmax(pred_mask, dim=1).argmax(dim=1)[0]
-    else:
-        pred = torch.softmax(pred_mask.unsqueeze(0), dim=1).argmax(dim=1)[0]
+#     # 예: 0 = 배경, 1 = 도로
+#     color_map = {
+#         0: [0, 0, 0],       # 검정 (배경)
+#         1: [255, 0, 85],    # 자홍색 (도로)
+#     }
 
-    pred = pred.detach().cpu().numpy().astype(np.uint8)
+#     # RGB 이미지로 변환
+#     color_image = np.zeros((pred.shape[0], pred.shape[1], 3), dtype=np.uint8)
+#     for cls, color in color_map.items():
+#         color_image[pred == cls] = color
 
-    # 2) 원본 이미지는 BGR 기반으로 변환 (cv2는 BGR)
-    overlay_img = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
+#     save_path = Path(save_path)
+#     save_path.parent.mkdir(parents=True, exist_ok=True)
+#     cv2.imwrite(str(save_path), cv2.cvtColor(color_image, cv2.COLOR_RGB2BGR))
+#     print(f"Saved prediction: {save_path}")
 
-    # 3) 빈 컬러 마스크 생성
-    mask_color = np.zeros_like(overlay_img, dtype=np.uint8)
-    mask_color[pred == 1] = color  # 예측된 부분에 색칠
-
-    # 4) 원본 이미지 위에 반투명 오버레이
-    output = cv2.addWeighted(overlay_img, 1.0, mask_color, alpha, 0)
-
-    # 5) 저장
-    cv2.imwrite(str(save_path), output)
-
-def visualization(
+def test_orfd(
     dataset_root,
     sam_model,
     seg_decoder,
-    device,
-    model_type_name='vits'
+    num_workers=1,
+    save_path = 'output_vits'
 ):
     # Dataset / Loader
+    #train_ds = ORFDDataset(dataset_root, mode='training')
+    # test_ds = ORFDDataset(dataset_root, mode='testing')
+    val_ds   = ORFDDataset(dataset_root, mode='validation')
+    
+    batch_size=1
+    # test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False,
+    #                           num_workers=num_workers, pin_memory=True)
+    val_loader   = DataLoader(val_ds, batch_size=batch_size, shuffle=False,
+                              num_workers=num_workers, pin_memory=True)
 
-    phases = [
-        # 'training', 
-        # 'testing', 
-        'validation'
-    ]
+    dataset_loader = {#'train':train_loader,
+                    #   'test':test_loader,
+                      'validation':val_loader
+                    }
 
-    dataset = { phase:ORFDDataset(dataset_root, mode=phase) for phase in phases}
-    dataloader = { phase:DataLoader(dataset[phase], batch_size=1, shuffle=False,
-                              num_workers=1, drop_last=False) for phase in phases}
+    # 모델(이미 존재한다고 가정)
+    # efficientsam, seg_decoder, preprocess, transform 은 사용자 코드에서 그대로 사용    
+    transform = ResizeLongestSide(1024)
 
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     sam_model.to(device).eval()
     seg_decoder.to(device).eval()
 
-    transform = ResizeLongestSide(1024)
-    best_val_iou = 0.0
+    # ====== Validation ======
+    seg_decoder.eval()
+    val_loss = 0.0
+    val_iou_list = []
+    running_loss = 0
+    with torch.no_grad():
+        for imgs, gts, base_name in dataset_loader['validation']:
 
-    save_path_dir = {phase:Path(f'./output/{model_type_name}') for phase in phases}
-    
-    for phase in dataloader.keys():
-        encoding_data_save_dir = save_path_dir[phase]
-        mask_image_save_dir = encoding_data_save_dir / 'masking_img'
-        masked_gt_image_dir = encoding_data_save_dir / 'masked_img'
-        
-        if not os.path.exists(mask_image_save_dir):
-            os.makedirs(mask_image_save_dir, exist_ok=True)
-
-        if not os.path.exists(masked_gt_image_dir):
-            os.makedirs(masked_gt_image_dir, exist_ok=True)
-
-        val_iou_list = []
-        val_loss = 0.0
-        running_loss = 0.0
-        count = 0
-
-        t0 = time.time()
-        for imgs, gts, image_name in dataloader[phase]:
-            # DataLoader가 batch_size=1일 때 rgb_image[0] 꺼내기
             rgb_image = imgs[0].numpy() if isinstance(imgs, torch.Tensor) else imgs
             gt = gts[0].numpy() if isinstance(gts, torch.Tensor) else gts
 
-            img = image_name[0]
-            dst_masking_image_save_path = mask_image_save_dir / img
-            dst_overlay_image_save_path = masked_gt_image_dir / img
             # 원본 크기
             ori_size = rgb_image.shape[:2] # (720, 1280)
             # transform 적용
@@ -228,20 +214,22 @@ def visualization(
             input_image_torch = torch.as_tensor(input_image).permute(2, 0, 1).contiguous()[None, :, :, :]
             input_image_torch = preprocess(input_image_torch).to(device)
 
-            with torch.no_grad():
-                image_embedding = sam_model.image_encoder(input_image_torch)
-                pred_mask = seg_decoder(image_embedding) # [1, 2, 256, 256] 반환
-                pred_mask = postprocess_masks(pred_mask, input_size, ori_size) # [1, 2, 720, 1280] 반환 -> 원본크기의 2채널
+            image_embedding = sam_model.image_encoder(input_image_torch)
+
+            # decoder는 학습 대상 (grad 계산 O)
+            pred_mask = seg_decoder(image_embedding) # [1, 2, 256, 256] 반환
+            pred_mask = postprocess_masks(pred_mask, input_size, ori_size) # [1, 2, 720, 1280] 반환 -> 원본크기의 2채널
 
             if pred_mask.shape[-2:] != gt.shape[-2:]: # 예측 마스크 크기와 gt_image 크기 비교
                 pred_mask = torch.nn.functional.interpolate(
                     pred_mask, size=gt.shape[-2:], mode='bilinear', align_corners=False
                 )
 
-            # if (count % 100) ==0:
-            #     save_pred_image(pred_mask, dst_masking_image_save_path )
-            #     save_overlay_image(rgb_image ,pred_mask, save_path = dst_overlay_image_save_path)
-            # count += 1
+            if not os.path.exists(save_path):
+                os.mkdir(save_path)
+
+            save_path = Path(save_path) 
+            save_pred_image(pred_mask, save_path/base_name[0])
 
             # ✅ 타깃 텐서 변환 (720, 1280) -> (1, 720, 1280)
             gt = torch.as_tensor(gt, dtype=torch.long, device=pred_mask.device)
@@ -251,76 +239,50 @@ def visualization(
             # 🔥 0~255 → 0~1로 변환
             if gt.max() > 1:
                 gt = (gt > 127).long()
-
+            
             loss = torch.nn.functional.cross_entropy(pred_mask, gt)
             running_loss += loss.item() * gt.size(0)
 
+            # IoU 계산
             preds = torch.softmax(pred_mask, dim=1).argmax(dim=1)  # [B,H,W] 0/1
             val_iou_list.append(binary_iou(preds, gt))
 
+    val_loss = running_loss  / len(val_loader.dataset)
+    mean_iou = np.mean(val_iou_list) if val_iou_list else 0.0
 
-
-        val_loss = running_loss  / len(dataloader[phase].dataset)
-        mean_iou = np.mean(val_iou_list) if val_iou_list else 0.0
-        dt = time.time() - t0
-        print(f"model_name={model_type_name} Phase={phase} val_loss={val_loss:.4f}  mIoU={mean_iou:.4f}  ({dt:.1f}s)")
+    print(f'Result:{val_loss}, Mean IOU:{mean_iou}')
 
 
 def main():
+    print("Loading model...")
 
-    model_types = [
-        'vit_h',
-        'vit_l', 
-        'vit_b',
-        'vits', 
-        'vitt'
-    ]
-    device = torch.device("cuda")
-    # device = torch.device("cuda:0") if torch.cuda.is_available() else 'cpu'
-
-    sam_model_dict ={
-        'vit_h':sam_model_registry['vit_h'],
-        'vit_l':sam_model_registry['vit_l'],
-        'vit_b':sam_model_registry['vit_b'],
-        'vits':build_efficient_sam_vits,
-        'vitt':build_efficient_sam_vitt
-    }
-
-    sam_model_weight_chekpoint = {
-        'vit_h': './weights/sam_vit_h_4b8939.pth',
-        'vit_l': './weights/sam_vit_l_0b3195.pth',
-        'vit_b': './weights/sam_vit_b_01ec64.pth',
-        'vits': './weights/efficient_sam_vits.pt',
-        'vitt': './weights/efficient_sam_vitt.pt',
-    }
-
-    seg_decoder_weight_checkpoint = {
-        'vit_h': './ckpts/best_vit_h_1118.pth',
-        'vit_l': './ckpts/best_vit_l_1118.pth',
-        'vit_b': './ckpts/best_vit_b_1118.pth',
-        'vits': './ckpts/best_vits_1118.pth',
-        'vitt': './ckpts/best_vitt_1118.pth',  
-    }
-
-   # 이미지 데이터 디렉터리 경로
     image_file = './ORFD_dataset'
-    for model_type in model_types:
+    best_model_path = r'ckpts/best_vits_251118.pth'
 
-        print(f'Now Loaddig.... {model_type}') # 모델 타입에 따른 설정
-        
-        sam_model = sam_model_dict[model_type](checkpoint=sam_model_weight_chekpoint[model_type])
-        seg_decoder = SegHead(sam_variant=model_type)
-        checkpoint = torch.load(seg_decoder_weight_checkpoint[model_type], weights_only=False)
-        seg_decoder.load_state_dict(checkpoint['seg_decoder'])
-        print(f"The best weight was found at {checkpoint['epoch']}")
+    '''
+    pth structure:
+    {"epoch": epoch,
+     "efficientsam": sam_model.state_dict(),
+     "seg_decoder": seg_decoder.state_dict(),
+     "optimizer": optimizer.state_dict(),
+     "best_val_iou": best_val_iou}
+    '''
 
-        visualization(
-            dataset_root = image_file,
-            sam_model=sam_model,
-            seg_decoder = seg_decoder,
-            device = device,
-            model_type_name = model_type
-        )
+    efficientsam = build_efficient_sam_vits(checkpoint="./weights/adaptive_efficient_sam.pth")
+
+    model_type = 'vits'
+    seg_decoder = SegHead(sam_variant=model_type)
+
+    checkpoint = torch.load(best_model_path)
+    print(f"The best weight was found at {checkpoint['epoch']}")
+    seg_decoder.load_state_dict(checkpoint['seg_decoder'])
+   # 이미지 데이터 디렉터리 경로
+
+    test_orfd(
+        dataset_root = image_file,
+        sam_model=efficientsam,
+        seg_decoder=seg_decoder,
+    )
 
 if __name__ == '__main__':
     main()

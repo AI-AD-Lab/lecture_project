@@ -1,6 +1,6 @@
 import cv2  # type: ignore
 
-from segment_anything import sam_model_registry
+# from segment_anything import sam_model_registry
 
 import numpy as np
 import torch
@@ -12,8 +12,10 @@ import matplotlib.pyplot as plt
 # from typing import Any, Dict, List
 from typing import Any, Dict, List, Tuple
 
-from seg_decoder import SegHead, SegHeadUpConv
-from segment_anything.utils.transforms import ResizeLongestSide
+from pathlib import Path
+
+#from seg_decoder import SegHead, SegHeadUpConv
+#from segment_anything.utils.transforms import ResizeLongestSide
 from torch.nn import functional as F
 
 import torch, gc
@@ -21,12 +23,15 @@ import torch.nn as nn
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
 
-from efficient_sam.build_efficient_sam import build_efficient_sam_vitt, build_efficient_sam_vits
-from torchvision import transforms
+#from efficient_sam.build_efficient_sam import build_efficient_sam_vitt, build_efficient_sam_vits
+#from torchvision import transforms
     
 from dataloader import ORFDDataset
 from torch.utils.data import DataLoader
 from pathlib import Path
+
+# adaptive patch 모델 적용
+from rod_effs_ap_model import RODSegAdaptivePatch
 
 def show_anns(anns):
     if len(anns) == 0:
@@ -166,6 +171,71 @@ def save_overlay_image(rgb_image, pred_mask, save_path, color=(0, 0, 255), alpha
     # 5) 저장
     cv2.imwrite(str(save_path), output)
 
+def visualization_ap(
+    dataset_root: str,
+    model: nn.Module,
+    device: torch.device,
+    phase: str = "validation",
+    model_tag: str = "rod_effs_ap_vits",
+):
+    """
+    Adaptive Patch 모델(RODSegAdaptivePatch)로 ORFD를 시각화.
+    - dataset_root: ORFDDataset 루트
+    - model: 학습된 RODSegAdaptivePatch
+    - phase: 'training' / 'testing' / 'validation' (기본 validation)
+    - model_tag: 저장 폴더 이름에 들어갈 태그
+    """
+    ds = ORFDDataset(dataset_root, mode=phase)
+    loader = DataLoader(ds, batch_size=1, shuffle=False, num_workers=1, drop_last=False)
+
+    model.to(device).eval()
+
+    # 출력 디렉토리 설정
+    base_dir = Path(f"./output_ap/{model_tag}/{phase}")
+    mask_dir = base_dir / "masking_img"
+    overlay_dir = base_dir / "masked_img"
+
+    os.makedirs(mask_dir, exist_ok=True)
+    os.makedirs(overlay_dir, exist_ok=True)
+
+    print(f"[{phase}] Loaded {len(ds)} image pairs.")
+    print(f"Saving to: {base_dir}")
+
+    with torch.no_grad():
+        for imgs, gts, image_name in loader:
+            # imgs: [1,H,W,3] 또는 [1,3,H,W] (dataset 구현에 따라 다름)
+            img_name = image_name[0]
+
+            # 1) RGB 이미지 numpy로 (시각화용)
+            if isinstance(imgs, torch.Tensor):
+                rgb = imgs[0].cpu().numpy()
+            else:
+                rgb = imgs[0]
+
+            # rgb가 [H,W,3] 인지 확인, 아니라면 transpose
+            if rgb.ndim == 3 and rgb.shape[0] in (1, 3):
+                # [C,H,W] -> [H,W,C]
+                rgb = np.transpose(rgb, (1, 2, 0))
+
+            # 2) 모델 입력용 텐서 준비
+            imgs_t = imgs.to(device, dtype=torch.float32)
+            if imgs_t.ndim == 4 and imgs_t.shape[1] not in (1, 3):
+                # [B,H,W,3] -> [B,3,H,W]
+                imgs_t = imgs_t.permute(0, 3, 1, 2).contiguous()
+
+            # 3) forward
+            logits = model(imgs_t)  # [1,2,H,W]
+
+            # 4) 저장 경로
+            dst_mask_path = mask_dir / img_name
+            dst_overlay_path = overlay_dir / img_name
+
+            # 5) 마스크/오버레이 저장
+            save_pred_image(logits, dst_mask_path)
+            save_overlay_image(rgb, logits, save_path=dst_overlay_path)
+
+
+"""
 def visualization(
     dataset_root,
     sam_model,
@@ -204,12 +274,7 @@ def visualization(
         if not os.path.exists(masked_gt_image_dir):
             os.makedirs(masked_gt_image_dir, exist_ok=True)
 
-        val_iou_list = []
-        val_loss = 0.0
-        running_loss = 0.0
-        count = 0
-
-        t0 = time.time()
+        running_loss = 0
         for imgs, gts, image_name in dataloader[phase]:
             # DataLoader가 batch_size=1일 때 rgb_image[0] 꺼내기
             rgb_image = imgs[0].numpy() if isinstance(imgs, torch.Tensor) else imgs
@@ -238,36 +303,12 @@ def visualization(
                     pred_mask, size=gt.shape[-2:], mode='bilinear', align_corners=False
                 )
 
-            # if (count % 100) ==0:
-            #     save_pred_image(pred_mask, dst_masking_image_save_path )
-            #     save_overlay_image(rgb_image ,pred_mask, save_path = dst_overlay_image_save_path)
-            # count += 1
-
-            # ✅ 타깃 텐서 변환 (720, 1280) -> (1, 720, 1280)
-            gt = torch.as_tensor(gt, dtype=torch.long, device=pred_mask.device)
-            if gt.ndim == 2:
-                gt = gt.unsqueeze(0)  # [1, H, W] 형태로 맞춤
-
-            # 🔥 0~255 → 0~1로 변환
-            if gt.max() > 1:
-                gt = (gt > 127).long()
-
-            loss = torch.nn.functional.cross_entropy(pred_mask, gt)
-            running_loss += loss.item() * gt.size(0)
-
-            preds = torch.softmax(pred_mask, dim=1).argmax(dim=1)  # [B,H,W] 0/1
-            val_iou_list.append(binary_iou(preds, gt))
-
-
-
-        val_loss = running_loss  / len(dataloader[phase].dataset)
-        mean_iou = np.mean(val_iou_list) if val_iou_list else 0.0
-        dt = time.time() - t0
-        print(f"model_name={model_type_name} Phase={phase} val_loss={val_loss:.4f}  mIoU={mean_iou:.4f}  ({dt:.1f}s)")
-
-
+            save_pred_image(pred_mask, dst_masking_image_save_path )
+            save_overlay_image(rgb_image ,pred_mask, save_path = dst_overlay_image_save_path)
+"""
 def main():
 
+    """
     model_types = [
         'vit_h',
         'vit_l', 
@@ -275,9 +316,12 @@ def main():
         'vits', 
         'vitt'
     ]
-    device = torch.device("cuda")
-    # device = torch.device("cuda:0") if torch.cuda.is_available() else 'cpu'
+    """
 
+    # device = torch.device("cuda")
+    # device = torch.device("cuda:0") if torch.cuda.is_available() else 'cpu'
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    """
     sam_model_dict ={
         'vit_h':sam_model_registry['vit_h'],
         'vit_l':sam_model_registry['vit_l'],
@@ -301,9 +345,44 @@ def main():
         'vits': './ckpts/best_vits_1118.pth',
         'vitt': './ckpts/best_vitt_1118.pth',  
     }
+"""
 
    # 이미지 데이터 디렉터리 경로
-    image_file = './ORFD_dataset'
+    dataset_root = './ORFD_dataset'
+
+    # Adaptive Patch EfficientSAM ViT-S ckpt (train_1127.py 에서 쓴 거랑 동일하게)
+    sam_ckpt = "./weights/efficient_sam_vits.pt"
+    ap_ckpt_path = "./ckpts/best_rod_effs_ap_vits.pth"  # train_orfd_ap 에서 저장한 경로와 맞춰야 함
+
+
+    # 1) 모델 생성
+    model = RODSegAdaptivePatch(
+        sam_ckpt=sam_ckpt,
+        num_classes=2,
+        im_size=1024,
+        boundary_thresh=0.0,
+    )
+
+    # 2) 학습된 weight 로드
+    if os.path.exists(ap_ckpt_path):
+        ckpt = torch.load(ap_ckpt_path, map_location="cpu")
+        state = ckpt.get("model", ckpt)  # 저장 방식에 따라 'model' 키 안에 있을 수도 있음
+        model.load_state_dict(state, strict=True)
+        print(f"[INFO] Loaded AP model checkpoint from {ap_ckpt_path}")
+        print(f"       best_val_iou = {ckpt.get('best_val_iou', 'N/A')}")
+    else:
+        print(f"[WARN] checkpoint not found: {ap_ckpt_path}")
+        print("       -> using randomly initialized AP model (just for debug)")
+
+    # 3) 시각화 실행 (validation 세트 기준)
+    visualization_ap(
+        dataset_root=dataset_root,
+        model=model,
+        device=device,
+        phase="validation",
+        model_tag="rod_effs_ap_vits",
+    )
+"""
     for model_type in model_types:
 
         print(f'Now Loaddig.... {model_type}') # 모델 타입에 따른 설정
@@ -321,6 +400,9 @@ def main():
             device = device,
             model_type_name = model_type
         )
+"""
+
+
 
 if __name__ == '__main__':
     main()

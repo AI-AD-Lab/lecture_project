@@ -181,7 +181,7 @@ def test_orfd(
                               num_workers=num_workers, pin_memory=True)
 
     dataset_loader = {#'train':train_loader,
-                      'test':test_loader,
+                    #   'test':test_loader,
                       'validation':val_loader
                     }
 

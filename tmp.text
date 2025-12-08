@@ -1,5 +1,7 @@
 docker run --gpus all -it --name sam-dev -v $(pwd):/workspace  sam-dev  /bin/bash
 
+docker exec -it sam-dev /bin/bash
+
 
 adapive patch no training
 Result:1.2761083562929467, Mean IOU:0.1798713339900892
@@ -30,3 +32,26 @@ vitt - best result epoch(5)
 TRAIN || Loss - 0.021857555717740562, mIoU - 0.9757094834536115
 TEST || Loss - 0.172341336246038, mIoU - 0.9094273466744273
 VAL || Loss - 0.33283126773724114, mIoU - 0.8120531985558659
+
+
+
+인코딩 부분을 일정 크기로 통일된 상테
+모든 vit 모델들의 인코딩 후 특징 크기: [B, 256, 64, 64]
+
+segdecoder 처리 후에 나온 예측 mask 크기 
+mask origin size: [1, 2, 256, 256]
+
+posetPreceoss_mask 함수 이후 마스크 크기
+mask resize size: [1, 2, 720, 1280] 
+
+---------------------------
+x size:torch.Size([1, 256, 64, 64])
+local_res size: torch.Size([1, 256, 64, 64])
+
+기존의 boundary mask 크기: [1, 1, 64, 64]
+
+인코딩 데이터 크기로 broadcasting -> 1C를 64C로 확장
+boundary_mask: torch.Size([1, 256, 64, 64])
+
+score_8 size :torch.Size([1, 1, 128, 128])
+score_16 szie: torch.Size([1, 1, 64, 64])

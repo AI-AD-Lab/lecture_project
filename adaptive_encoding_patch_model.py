@@ -110,7 +110,7 @@ class BoundaryScoreModule(nn.Module):
         score_norm = (score_16 - mean) / (std + 1e-6)
 
         boundary_mask = (score_norm > self.thresh).float()  # [B,1,h,w]
-        return boundary_mask
+        return boundary_mask, score_16, score_8, grad_mag
 
 
 class RODSegAdaptivePatch(nn.Module):
@@ -158,7 +158,7 @@ class RODSegAdaptivePatch(nn.Module):
         B, C, h, w = x.shape
 
         # 1) boundary mask는 RGB 기준으로 계산해야 함
-        boundary_mask = self.boundary_module(image, patch_size=self.patch_size)
+        boundary_mask, _16, _8, _grad_mag = self.boundary_module(image, patch_size=self.patch_size)
         # boundary_mask: [B,1,h_b,w_b] (예: [B,1,h,w] 또는 더 coarse)
 
         # 2) feature 크기에 맞게 resize
@@ -179,3 +179,14 @@ class RODSegAdaptivePatch(nn.Module):
         feats_refined = x + local_res * boundary_mask  # [B,C,h,w]
 
         return feats_refined, out
+
+    def boundary_analysis(self, image, feature:torch.Tensor) -> torch.Tensor:
+        x, out = feature          # x: [B,C,h,w]
+        B, C, h, w = x.shape
+
+        # 1) boundary mask는 RGB 기준으로 계산해야 함
+        boundary_mask, _16, _8, _grad_mag = self.boundary_module(image, patch_size=self.patch_size)
+        # boundary_mask: [B,1,h_b,w_b] (예: [B,1,h,w] 또는 더 coarse)
+
+
+        return boundary_mask, _16, _8, _grad_mag

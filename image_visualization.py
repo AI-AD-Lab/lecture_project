@@ -23,7 +23,7 @@ from torch.optim.lr_scheduler import LambdaLR
 
 from efficient_sam.build_efficient_sam import build_efficient_sam_vitt, build_efficient_sam_vits
 from torchvision import transforms
-    
+from tqdm import tqdm
 from dataloader import ORFDDataset
 from torch.utils.data import DataLoader
 from pathlib import Path
@@ -166,6 +166,21 @@ def save_overlay_image(rgb_image, pred_mask, save_path, color=(0, 0, 255), alpha
     # 5) 저장
     cv2.imwrite(str(save_path), output)
 
+
+def binary_f1(preds, targets, eps=1e-6):
+    """Binary F1-score (Dice) 계산 함수"""
+    preds = preds.view(-1)
+    targets = targets.view(-1)
+
+    tp = (preds * targets).sum().float()
+    fp = (preds * (1 - targets)).sum().float()
+    fn = ((1 - preds) * targets).sum().float()
+
+    precision = tp / (tp + fp + eps)
+    recall = tp / (tp + fn + eps)
+
+    return 2 * (precision * recall) / (precision + recall + eps)
+
 def visualization(
     dataset_root,
     sam_model,
@@ -177,8 +192,8 @@ def visualization(
 
     phases = [
         # 'training', 
-        # 'testing', 
-        'validation'
+        'testing',
+        #validation'
     ]
 
     dataset = { phase:ORFDDataset(dataset_root, mode=phase) for phase in phases}
@@ -204,13 +219,14 @@ def visualization(
         if not os.path.exists(masked_gt_image_dir):
             os.makedirs(masked_gt_image_dir, exist_ok=True)
 
-        val_iou_list = []
-        val_loss = 0.0
-        running_loss = 0.0
-        count = 0
+        test_running_loss = 0.0
+        test_iou_list = []
+        test_f1_list = []
+        frame_times = []
 
-        t0 = time.time()
-        for imgs, gts, image_name in dataloader[phase]:
+        for imgs, gts, image_name in tqdm(dataloader[phase]):
+            frame_start  = time.time()
+
             # DataLoader가 batch_size=1일 때 rgb_image[0] 꺼내기
             rgb_image = imgs[0].numpy() if isinstance(imgs, torch.Tensor) else imgs
             gt = gts[0].numpy() if isinstance(gts, torch.Tensor) else gts
@@ -238,10 +254,10 @@ def visualization(
                     pred_mask, size=gt.shape[-2:], mode='bilinear', align_corners=False
                 )
 
-            # if (count % 100) ==0:
-            #     save_pred_image(pred_mask, dst_masking_image_save_path )
-            #     save_overlay_image(rgb_image ,pred_mask, save_path = dst_overlay_image_save_path)
-            # count += 1
+            dst_masking_image_save_path = mask_image_save_dir / image_name[0]
+            dst_overlay_image_save_path = masked_gt_image_dir / image_name[0]
+            save_pred_image(pred_mask, dst_masking_image_save_path )
+            save_overlay_image(rgb_image ,pred_mask, save_path = dst_overlay_image_save_path)
 
             # ✅ 타깃 텐서 변환 (720, 1280) -> (1, 720, 1280)
             gt = torch.as_tensor(gt, dtype=torch.long, device=pred_mask.device)
@@ -252,27 +268,41 @@ def visualization(
             if gt.max() > 1:
                 gt = (gt > 127).long()
 
+            # ---- Loss ----
             loss = torch.nn.functional.cross_entropy(pred_mask, gt)
-            running_loss += loss.item() * gt.size(0)
+            test_running_loss += loss.item() * gt.size(0)
 
-            preds = torch.softmax(pred_mask, dim=1).argmax(dim=1)  # [B,H,W] 0/1
-            val_iou_list.append(binary_iou(preds, gt))
+            # ---- IoU 계산 ----
+            preds = torch.softmax(pred_mask, dim=1).argmax(dim=1)
+            test_iou_list.append(binary_iou(preds, gt))
+            # ---- F1-score 계산 추가 ----
+            f1 = binary_f1(preds, gt)
+            test_f1_list.append(f1.item())
 
+        frame_end = time.time()
+        frame_times.append(frame_end - frame_start)
 
+        end_time = time.time()
+        mean_test_loss = test_running_loss / len(dataloader['testing'])
+        mean_test_iou = sum(test_iou_list) / len(test_iou_list)
+        mean_test_f1 = sum(test_f1_list) / len(test_f1_list)
 
-        val_loss = running_loss  / len(dataloader[phase].dataset)
-        mean_iou = np.mean(val_iou_list) if val_iou_list else 0.0
-        dt = time.time() - t0
-        print(f"model_name={model_type_name} Phase={phase} val_loss={val_loss:.4f}  mIoU={mean_iou:.4f}  ({dt:.1f}s)")
+        avg_time = sum(frame_times) / len(frame_times)
+        fps = 1.0 / avg_time
+
+        total_time = sum(frame_times)
+
+        print(f'Model Type: {model_type_name}, Testing Time: {total_time:.2f} seconds, FPS: {fps:.2f}')
+        print(f'Test Loss: {mean_test_loss:.4f}, Test mIoU: {mean_test_iou:.4f}, Test F1-score: {mean_test_f1:.4f}')
 
 
 def main():
 
     model_types = [
-        'vit_h',
-        'vit_l', 
-        'vit_b',
-        'vits', 
+        #'vit_h',
+        #'vit_l', 
+        #'vit_b',
+        #'vits', 
         'vitt'
     ]
     device = torch.device("cuda")

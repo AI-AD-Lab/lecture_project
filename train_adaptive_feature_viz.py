@@ -191,6 +191,20 @@ def save_gray_normalized(pred_mask, save_path, eps=1e-6):
     # 이미지 저장
     cv2.imwrite(save_path, img)
 
+def binary_f1(preds, targets, eps=1e-6):
+    """Binary F1-score (Dice) 계산 함수"""
+    preds = preds.view(-1)
+    targets = targets.view(-1)
+
+    tp = (preds * targets).sum().float()
+    fp = (preds * (1 - targets)).sum().float()
+    fn = ((1 - preds) * targets).sum().float()
+
+    precision = tp / (tp + fp + eps)
+    recall = tp / (tp + fn + eps)
+
+    return 2 * (precision * recall) / (precision + recall + eps)
+
 def adaptive_patch_analysis(
     dataset_root,
     sam_model,
@@ -249,8 +263,12 @@ def adaptive_patch_analysis(
 
     test_running_loss = 0.0
     test_iou_list = []
+    test_f1_list = []
+    frame_times = []
 
     for imgs, gts, _ in tqdm(dataset_loader['testing']):
+
+        frame_start  = time.time()
 
         # DataLoader가 batch_size=1일 때 rgb_image[0] 꺼내기
         rgb_image = imgs[0].numpy() if isinstance(imgs, torch.Tensor) else imgs
@@ -289,13 +307,13 @@ def adaptive_patch_analysis(
             dst_boundary_image_gray_mag_save_path = boundary_image_gray_mag / _[0]
             dst_boundary_image_masked_save_path = boundary_image_masked_dir / _[0]
 
-            save_pred_image(pred_mask, dst_masking_image_save_path )
-            save_overlay_image(rgb_image ,pred_mask, save_path = dst_overlay_image_save_path)
+            # save_pred_image(pred_mask, dst_masking_image_save_path )
+            # save_overlay_image(rgb_image ,pred_mask, save_path = dst_overlay_image_save_path)
 
-            save_gray_normalized(boundary , dst_boundary_image_mask_save_path)
-            save_gray_normalized(_8 , dst_boundary_image_8_save_path)
-            save_gray_normalized(_16 , dst_boundary_image_16_save_path)
-            save_gray_normalized(_gray , dst_boundary_image_gray_mag_save_path)
+            # save_gray_normalized(boundary , dst_boundary_image_mask_save_path)
+            # save_gray_normalized(_8 , dst_boundary_image_8_save_path)
+            # save_gray_normalized(_16 , dst_boundary_image_16_save_path)
+            # save_gray_normalized(_gray , dst_boundary_image_gray_mag_save_path)
 
             # ✅ 타깃 텐서 변환 (720, 1280) -> (1, 720, 1280)
             gt = torch.as_tensor(gt, dtype=torch.long, device=pred_mask.device)
@@ -306,19 +324,37 @@ def adaptive_patch_analysis(
             if gt.max() > 1:
                 gt = (gt > 127).long()
 
+        frame_end = time.time()
+        frame_times.append(frame_end - frame_start)
+
+        # ---- Loss ----
         loss = torch.nn.functional.cross_entropy(pred_mask, gt)
         test_running_loss += loss.item() * gt.size(0)
 
-        # IoU 계산
-        preds = torch.softmax(pred_mask, dim=1).argmax(dim=1) 
+        # ---- IoU 계산 ----
+        preds = torch.softmax(pred_mask, dim=1).argmax(dim=1)
         test_iou_list.append(binary_iou(preds, gt))
+        # ---- F1-score 계산 추가 ----
+        f1 = binary_f1(preds, gt)
+        test_f1_list.append(f1.item())
 
+    end_time = time.time()
+    mean_test_loss = test_running_loss / len(dataset_loader['testing'])
+    mean_test_iou = sum(test_iou_list) / len(test_iou_list)
+    mean_test_f1 = sum(test_f1_list) / len(test_f1_list)
+
+    avg_time = sum(frame_times) / len(frame_times)
+    fps = 1.0 / avg_time
+
+    total_time = sum(frame_times)
+
+    print(f'Testing Time: {total_time:.2f} seconds, FPS: {fps:.2f}')
+    print(f'Test Loss: {mean_test_loss:.4f}, Test mIoU: {mean_test_iou:.4f}, Test F1-score: {mean_test_f1:.4f}')
 
     test_mean_loss = test_running_loss / len(dataset_loader['testing'].dataset)
     test_miou = np.mean(test_iou_list) if test_iou_list else 0.0
     print(f'TEST || Loss - {test_mean_loss}, mIoU - {test_miou}')
 
-    print("Training done.")
     del sam_model
     del seg_decoder
     del adaptive_encoder
@@ -331,7 +367,7 @@ def adaptive_patch_analysis(
 def main():
 
     model_types = [
-        # 'vit_h',
+        'vit_h',
         'vit_l', 
         'vit_b',
         'vits', 
@@ -385,8 +421,6 @@ def main():
             device = device,
             model_type_name = model_type,
         )
-
-
 
 def write_train_log_csv(filepath: str, epoch: int, 
                         train_loss: float, train_miou: float, 

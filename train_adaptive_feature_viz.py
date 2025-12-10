@@ -33,83 +33,15 @@ from dataloader import ORFDDataset
 from torch.utils.data import DataLoader
 
 from logger import TrainLogger
+from train_utils import (
+    make_dataloaders, 
+    binary_iou, 
+    postprocess_masks, 
+    preprocess, 
+    build_poly_scheduler,
+    gt_processing
+)
 
-def show_anns(anns):
-    if len(anns) == 0:
-        return
-    sorted_anns = sorted(anns, key=(lambda x: x['area']), reverse=True)
-    ax = plt.gca()
-    ax.set_autoscale_on(False)
-
-    img = np.ones((sorted_anns[0]['segmentation'].shape[0], sorted_anns[0]['segmentation'].shape[1], 4))
-    img[:,:,3] = 0
-    for ann in sorted_anns:
-        # if ann['pred_class'] == 1:
-        m = ann['segmentation']
-        color_mask = np.concatenate([np.random.random(3), [0.35]])
-        # img[m] = [0.25526778, 0.19120787, 0.67079563, 0.35]
-        img[m] = color_mask
-    ax.imshow(img)
-
-
-def show_anns_2(anns):
-    if len(anns) == 0:
-        return
-    sorted_anns = sorted(anns, key=(lambda x: x['area']), reverse=True)
-    ax = plt.gca()
-    ax.set_autoscale_on(False)
-
-    img = np.ones((sorted_anns[0]['segmentation'].shape[0], sorted_anns[0]['segmentation'].shape[1], 4))
-    img[:,:,3] = 0
-    for ann in sorted_anns:
-        if ann['pred_class'] >= 0.9:
-            m = ann['segmentation']
-            img[m] = [0.25526778, 0.19120787, 0.67079563, 0.35]
-
-    ax.imshow(img)
-
-def build_optimizer(model, lr=1e-3):
-    return AdamW(model.parameters(), lr=lr)
-
-# 3) Poly LR scheduler: lr = base_lr * (1 - iter/max_iter) ** power
-def build_poly_scheduler(optimizer, total_steps, power=0.9):
-    def poly_decay(step):
-        step = min(step, total_steps)
-        return (1 - step / float(total_steps)) ** power
-    return LambdaLR(optimizer, lr_lambda=poly_decay)
-
-def preprocess(x):
-    """Normalize pixel values and pad to a square input."""
-    # Normalize colors
-    pixel_mean = torch.Tensor([123.675, 116.28, 103.53]).view(-1, 1, 1)
-    pixel_std = torch.Tensor([58.395, 57.12, 57.375]).view(-1, 1, 1)
-
-    x = x.to(torch.float32).to(pixel_mean.device)
-
-    if x.shape[2] != 1024 or x.shape[3] != 1024:
-        x = F.interpolate(
-            x,
-            (1024, 1024),
-            mode="bilinear",
-        )
-
-    x = (x - pixel_mean) / pixel_std
-    return x
-
-def postprocess_masks(
-    masks: torch.Tensor,
-    input_size: Tuple[int, ...],
-    original_size: Tuple[int, ...],
-) -> torch.Tensor:
-    masks = F.interpolate(
-        masks,
-        (64, 64),
-        mode="bilinear",
-        align_corners=False,
-    )
-    masks = masks[..., : input_size[0], : input_size[1]]
-    masks = F.interpolate(masks, original_size, mode="bilinear", align_corners=False)
-    return masks
 
 '''
 number of channels for each model

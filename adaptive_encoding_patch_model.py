@@ -1,40 +1,10 @@
 import cv2  # type: ignore
-
-from segment_anything import sam_model_registry
-from tqdm import tqdm
-
 import numpy as np
 import torch
-import glob
-import time
-import os
-import matplotlib
-import matplotlib.pyplot as plt
-# from typing import Any, Dict, List
-from typing import Any, Dict, List, Tuple
-
-from seg_decoder import SegHead, SegHeadUpConv
-from segment_anything.utils.transforms import ResizeLongestSide
+import torch.nn as nn
 from torch.nn import functional as F
 
-import torch, gc
-import torch.nn as nn
-from torch.optim import AdamW
-from torch.optim.lr_scheduler import LambdaLR
-
-from efficient_sam.build_efficient_sam import build_efficient_sam_vitt, build_efficient_sam_vits
-from torchvision import transforms
     
-from dataloader import ORFDDataset
-from torch.utils.data import DataLoader
-
-# adpative vit backbone import
-from effsam_vits_backbone_ap import (
-    EffSamViTSBackboneAP,
-    load_efficient_sam_vits_weights_ap,
-)
-
-
 class BoundaryScoreModule(nn.Module):
     """
     입력 RGB에서 Sobel gradient 기반으로 boundary score 계산.

@@ -28,6 +28,11 @@ from dataloader import ORFDDataset
 from torch.utils.data import DataLoader
 from pathlib import Path
 
+'''
+본 코드는 이미지에서 sam model로 얻은 latent feature들을 따로 저장하려 하였으나,
+모종의 이유로 latent feature를 저장하지 못했습니다.
+'''
+
 def show_anns(anns):
     if len(anns) == 0:
         return

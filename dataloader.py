@@ -56,7 +56,8 @@ class ORFDDataset(Dataset):
 # 사용 예시
 if __name__ == "__main__":
     from torchvision import transforms
-    
+    from torch.utils.data import DataLoader
+
     transform = transforms.Compose([
         # transforms.Resize((256, 256)),
         transforms.ToTensor()
@@ -64,11 +65,21 @@ if __name__ == "__main__":
     
     dataset_root = './ORFD_dataset'
     train_dataset = ORFDDataset(dataset_root, mode='training', transform=transform)
-    val_dataset = ORFDDataset(dataset_root, mode='validation', transform=transform)
     
-    print(len(train_dataset), "train samples")
-    print(len(val_dataset), "validation samples")
+    train_loader = DataLoader(train_dataset,
+         batch_size=4,
+         shuffle=False,
+         num_workers=4,
+         drop_last=True
+    )
+
+    for img, gt, _ in train_loader:
+        
+        print(img[0].shape)
+        break
+    #print(len(train_dataset), "train samples")
 
     # 예시로 한 쌍 출력
-    img, gt, _ = train_dataset[0]
-    print("Image shape:", img.shape, "GT shape:", gt.shape)
+    #img, gt, _ = train_dataset[0]
+    #print("Image shape:", img.shape, "GT shape:", gt.shape)
+

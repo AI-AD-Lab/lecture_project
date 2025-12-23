@@ -1,5 +1,7 @@
 ORFD_dataset/*
 ORFD_dataset
+ORFD_latent*
+sam_latent_data*
 Final_Dataset
 weights
 output*

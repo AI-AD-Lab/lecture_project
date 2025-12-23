@@ -97,12 +97,12 @@ def make_dataloaders(dataset_root, batch_size=1, num_workers=1):
 
 
 def gt_processing(gt, device):
-    # ✅ 타깃 텐서 변환 (720, 1280) -> (1, 720, 1280)
+    # 타깃 텐서 변환 (720, 1280) -> (1, 720, 1280)
     gt = torch.as_tensor(gt, dtype=torch.long, device=device)
     if gt.ndim == 2:
         gt = gt.unsqueeze(0)  # [1, H, W] 형태로 맞춤
 
-    # 🔥 0~255 → 0~1로 변환
+    #  0~255 → 0, 1로 변환
     if gt.max() > 1:
         gt = (gt > 128).long()
     return gt

@@ -95,7 +95,7 @@ def train_orfd(
     global_step = 0
 
     for epoch in range(1, epochs + 1):
-        log_write(f'===== Epoch {epoch}/{epochs} =====')
+        log_write(f'{model_type_name} || ===== Epoch {epoch}/{epochs} =====')
 
         # 각 phase 별로 공통 루프 사용
         for phase in phases:
@@ -179,7 +179,7 @@ def train_orfd(
                     # best validation 모델 저장
                     ckpt_path = os.path.join(
                         parent_dir_with_date,
-                        f'{date_time}/{model_type_name}_best_val.pth'
+                        f'{model_type_name}_best_val.pth'
                     )
                     torch.save(
                         {
@@ -218,11 +218,11 @@ def train_orfd(
     
 def main():
     model_types = [
-        'vit_h',
+        # 'vit_h',
         'vit_l', 
         'vit_b',
         'vits', 
-        'vitt'
+        # 'vitt'
     ]
     device = torch.device("cuda:0")
 
@@ -257,12 +257,12 @@ def main():
             adaptive_encoder=adaptive_encoder,
             seg_decoder=seg_decoder,
             device=device,
-            epochs=100,
+            epochs=20,
             lr=1e-4,
             parent_dir = f'ckpts_adaptive',
             model_type_name=model_type,
             date_time = date, 
-            patience=20
+            patience=5
         )
 
 

@@ -36,18 +36,6 @@ from train_utils import (
     gt_processing
 )
 
-def gt_processing(gt, device):
-    # ✅ 타깃 텐서 변환 (720, 1280) -> (1, 720, 1280)
-    gt = torch.as_tensor(gt, dtype=torch.long, device=device)
-    if gt.ndim == 2:
-        gt = gt.unsqueeze(0)  # [1, H, W] 형태로 맞춤
-
-    # 🔥 0~255 → 0~1로 변환
-    if gt.max() > 1:
-        gt = (gt > 128).long()
-    return gt
-
-
 def train_orfd(
     dataset_root,
     sam_model,
@@ -222,7 +210,7 @@ def train_orfd(
     
 def main():
     model_types = [
-        'vit_h',
+        # 'vit_h',
         'vit_l', 
         'vit_b',
         'vits', 
@@ -247,7 +235,8 @@ def main():
     }
 
     image_file = "./ORFD_dataset"
-    date = datetime.now().strftime("%y%m%d")
+    # date = datetime.now().strftime("%y%m%d")
+    date = '251210'
 
     for model_type in model_types:
         print(f"Now Loading.... {model_type}")
@@ -259,12 +248,12 @@ def main():
             sam_model=sam_model,
             seg_decoder=seg_decoder,
             device=device,
-            epochs=100,
+            epochs=20,
             lr=1e-4,
             parent_dir = f'ckpts_seghead',
             model_type_name=model_type,
             date_time = date, 
-            patience=20
+            patience=5
         )
 
 

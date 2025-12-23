@@ -1,0 +1,7 @@
+
+  IOU      paper       in_practice    proposed_method
+vit-H      0.937        0.9397          0.9451
+vit-L      0.933        0.9428          0.9318
+vit-B      0.931        0.9413          0.9398
+vit-T      0.927        0.9310          0.9369
+vit-S      0.967        0.9365          0.9328 

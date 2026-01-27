@@ -211,9 +211,9 @@ def train_orfd(
 def main():
     model_types = [
         # 'vit_h',
-        'vit_l', 
-        'vit_b',
-        'vits', 
+        # 'vit_l', 
+        # 'vit_b',
+        # 'vits', 
         'vitt'
     ]
     device = torch.device("cuda:0")
@@ -236,7 +236,7 @@ def main():
 
     image_file = "./ORFD_dataset"
     # date = datetime.now().strftime("%y%m%d")
-    date = '251210'
+    date = '260127'
 
     for model_type in model_types:
         print(f"Now Loading.... {model_type}")
@@ -248,7 +248,7 @@ def main():
             sam_model=sam_model,
             seg_decoder=seg_decoder,
             device=device,
-            epochs=20,
+            epochs=10,
             lr=1e-4,
             parent_dir = f'ckpts_seghead',
             model_type_name=model_type,

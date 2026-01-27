@@ -211,7 +211,7 @@ class RODSegAdaptivePatch(nn.Module):
         if model_type not in embed_size:
             raise ValueError(f"Unknown model_type: {model_type}")
         embed_dim = embed_size[model_type]
-        print(embed_dim)
+        # print(embed_dim)
 
         # boundary module 선택
         if edge_mode == "sobel":
@@ -250,6 +250,9 @@ class RODSegAdaptivePatch(nn.Module):
         B, C, h, w = x.shape
 
         boundary_mask, _16, _8, _grad = self.boundary_module(image, patch_size=self.patch_size)
+        
+        # print(boundary_mask,boundary_mask.shape)
+        # boundary_mask = self.boundary_module(image, patch_size=self.patch_size)
 
         # feature 해상도에 맞추기
         if boundary_mask.shape[-2:] != (h, w):

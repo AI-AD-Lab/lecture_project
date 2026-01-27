@@ -1,7 +1,37 @@
 
-  IOU      paper       in_practice    proposed_method
-vit-H      0.937        0.9397          0.9451
-vit-L      0.933        0.9428          0.9318
-vit-B      0.931        0.9413          0.9398
-vit-T      0.927        0.9310          0.9369
-vit-S      0.967        0.9365          0.9328 
+  IOU      paper       in_practice      sobel        canny      
+vit-H      0.937        0.9451          0.9451       0.9320
+vit-L      0.933        0.9428          0.9318       0.9428       
+vit-B      0.931        0.9413          0.9398       0.9391
+vit-S      0.967        0.9365          0.9328       0.9251
+vit-T      0.927        0.9369          0.9369       0.9302
+
+
+----------------------------------
+canny 260122 버전 시각화 test 결과
+
+Loading checkpoint: ./ckpts_ap_canny/260122/vit_h_best_val.pth
+[testing] Loaded 2193 image pairs.
+Testing Time: 798.65 seconds, FPS: 2.75
+Test Loss: 0.0761, Test mIoU: 0.9320, Test F1-score: 0.9642
+
+Loading checkpoint: ./ckpts_ap_canny/260122/vit_l_best_val.pth
+[testing] Loaded 2193 image pairs.
+Testing Time: 530.98 seconds, FPS: 4.13
+Test Loss: 0.0545, Test mIoU: 0.9428, Test F1-score: 0.9702
+
+Loading checkpoint: ./ckpts_ap_canny/260122/vit_b_best_val.pth
+[testing] Loaded 2193 image pairs.
+Testing Time: 296.03 seconds, FPS: 7.41
+Test Loss: 0.0627, Test mIoU: 0.9391, Test F1-score: 0.9680
+
+Loading checkpoint: ./ckpts_ap_canny/260122_1/vits_best_val.pth
+[testing] Loaded 2193 image pairs.
+Testing Time: 230.25 seconds, FPS: 9.52
+Test Loss: 0.0575, Test mIoU: 0.9251, Test F1-score: 0.9602
+
+Loading checkpoint: ./ckpts_ap_canny/260122/vitt_best_val.pth
+[testing] Loaded 2193 image pairs.
+Testing Time: 164.85 seconds, FPS: 13.30
+Test Loss: 0.0655, Test mIoU: 0.9302, Test F1-score: 0.9630
+

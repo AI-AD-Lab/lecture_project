@@ -78,6 +78,7 @@ def binary_iou(pred_mask, target):
     inter = (pred_mask & target.squeeze(1)).sum(dim=(1, 2)).float()
     union = (pred_mask | target.squeeze(1)).sum(dim=(1, 2)).float().clamp_min(1.0)
     return (inter / union).mean().item()
+    
 
 
 def make_dataloaders(dataset_root, batch_size=1, num_workers=1):

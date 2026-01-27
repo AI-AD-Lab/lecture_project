@@ -119,7 +119,7 @@ def train_orfd(
     total_steps = len(dataloaders["training"]) * epochs
     scheduler = build_poly_scheduler(optimizer, total_steps, power=0.9)
 
-    scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    scaler = torch.amp.GradScaler('cuda', enabled=use_amp)
 
     print(f"Train {model_type_name} | batch={batch_size}, workers={num_workers}, amp={use_amp}")
 
@@ -161,6 +161,7 @@ def train_orfd(
             dataloader = dataloaders[phase]
 
             for imgs, gts, _ in tqdm(dataloader, desc=phase):
+
                 # ---- imgs to GPU (배치 유지) ----
                 if not torch.is_tensor(imgs):
                     imgs = torch.as_tensor(imgs)
@@ -183,7 +184,8 @@ def train_orfd(
                 optimizer.zero_grad(set_to_none=True)
 
                 with torch.set_grad_enabled(is_train):
-                    with torch.cuda.amp.autocast(enabled=use_amp):
+                    with torch.amp.autocast('cuda', enabled=use_amp):
+
                         ap_image_embedding = adaptive_encoder(input_image_torch, image_embedding)
                         pred_mask = seg_decoder(ap_image_embedding)  # 기대: [B,2,256,256] 등
 
@@ -263,8 +265,8 @@ def train_orfd(
 def main():
     model_types = [
         # "vit_h",
-        "vit_l",
-        "vit_b",
+        # "vit_l",
+        # "vit_b",
         "vits",
         # "vitt",
     ]
@@ -288,14 +290,34 @@ def main():
     }
 
     dataset_root = "./ORFD_dataset"
-    date = datetime.now().strftime("%y%m%d")
+    # date = datetime.now().strftime("%y%m%d")
+    date = "260122_1"
+
+
+
+    # canny 파라미터(필요시만 튜닝)
+    edge_mode = "canny"  # "sobel" or "canny"
+    boundary_thresh = 0.0  # z-score threshold
+
+    low_thr = 0.10
+    high_thr = 0.30
+    thr_sharpness = 20.0
+    hyst_iters = 2
 
     for model_type in model_types:
         print(f"Now Loading.... {model_type}")
         sam_model = sam_model_dict[model_type](checkpoint=sam_model_weight_chekpoint[model_type])
 
         seg_decoder = SegHead(sam_variant=model_type)
-        adaptive_encoder = RODSegAdaptivePatch(model_type=model_type)
+        adaptive_encoder = RODSegAdaptivePatch(
+            model_type=model_type,
+            edge_mode=edge_mode,
+            boundary_thresh=boundary_thresh,
+            low_thr=low_thr,
+            high_thr=high_thr,
+            thr_sharpness=thr_sharpness,
+            hyst_iters=hyst_iters,
+        ).to(device).eval()
 
         train_orfd(
             dataset_root=dataset_root,
@@ -305,11 +327,11 @@ def main():
             device=device,
             epochs=20,
             lr=1e-4,
-            parent_dir="ckpts_adaptive",
+            parent_dir="ckpts_ap_canny",
             model_type_name=model_type,
             date_time=date,
             patience=5,
-            batch_size=4,
+            batch_size=2,
             num_workers=4,
             use_amp=True,
         )

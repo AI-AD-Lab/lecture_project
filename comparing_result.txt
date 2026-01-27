@@ -1,0 +1,6 @@
+
+vits - 
+IOU result || seghead:0.925, sobel:0.926, canny:0.925
+F1-score result || seghead:0.960, sobel:0.960, canny:0.960
+Maximun IOU diff: sobel-seghead:0.140, canny-seghead:0.247
+Maximun IOU diff image name: sobel-seghead:1623458379679.png, canny-seghead:1623458379679.png

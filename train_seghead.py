@@ -210,11 +210,11 @@ def train_orfd(
     
 def main():
     model_types = [
-        # 'vit_h',
+        'vit_h',
         # 'vit_l', 
         # 'vit_b',
         # 'vits', 
-        'vitt'
+        # 'vitt'
     ]
     device = torch.device("cuda:0")
 

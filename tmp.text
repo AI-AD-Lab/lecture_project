@@ -1,6 +1,7 @@
 docker run --gpus all --shm-size=8g -it --name sam-dev -v $(pwd):/workspace  sam-dev  /bin/bash
 
 docker exec -it sam-dev /bin/bash
+docker exec -it sam-dev2 /bin/bash
 
 
 adapive patch no training

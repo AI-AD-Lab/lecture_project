@@ -7,3 +7,6 @@ weights
 output*
 ckpts*
 ckpt*
+A_*
+code_2/
+*.txt

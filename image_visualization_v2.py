@@ -137,15 +137,16 @@ def save_overlay_image(rgb_image, pred_mask, save_path, color=(0, 0, 255), alpha
     cv2.imwrite(str(save_path), output)
 
 
+total_result_summary = {}
 
 def main():
 
     model_types = [
-        # 'vit_h',
-        # 'vit_l', 
-        # 'vit_b',
+        'vit_h',
+        'vit_l', 
+        'vit_b',
         'vits', 
-        # 'vitt'
+        'vitt'
     ]
     
     sam_model_dict ={
@@ -164,12 +165,20 @@ def main():
         'vitt': './weights/efficient_sam_vitt.pt',
     }
 
+    # seghead_adaptive_patch_model_weight_chekpoint = {
+    #     'vit_h': './ckpts_ap_canny/260122/vit_h_best_val.pth',
+    #     'vit_l': './ckpts_ap_canny/260122/vit_l_best_val.pth',
+    #     'vit_b': './ckpts_ap_canny/260122/vit_b_best_val.pth',
+    #     'vits': './ckpts_ap_canny/260122_1/vits_best_val.pth',
+    #     'vitt': './ckpts_ap_canny/260122/vitt_best_val.pth',  
+    # }
+
     seghead_adaptive_patch_model_weight_chekpoint = {
-        'vit_h': './ckpts_ap_canny/260122/vit_h_best_val.pth',
-        'vit_l': './ckpts_ap_canny/260122/vit_l_best_val.pth',
-        'vit_b': './ckpts_ap_canny/260122/vit_b_best_val.pth',
-        'vits': './ckpts_ap_canny/260122_1/vits_best_val.pth',
-        'vitt': './ckpts_ap_canny/260122/vitt_best_val.pth',  
+        'vit_h': './ckpts_2/260121_canny_sensitive/vit_h_canny_sensitive_best_val.pth',
+        'vit_l': './ckpts_2/260121_canny_sensitive/vit_l_canny_sensitive_best_val.pth',
+        'vit_b': './ckpts_2/260121_canny_sensitive/vit_b_canny_sensitive_best_val.pth',
+        'vits': './ckpts_2/260121_canny_sensitive/vits_canny_sensitive_best_val.pth',
+        'vitt': './ckpts_2/260121_canny_sensitive/vitt_canny_sensitive_best_val.pth',  
     }
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -180,10 +189,34 @@ def main():
     edge_mode = "canny"  # "sobel" or "canny"
     boundary_thresh = 0.0  # z-score threshold
 
-    low_thr = 0.10
-    high_thr = 0.30
-    thr_sharpness = 20.0
-    hyst_iters = 2
+    # defualt setting
+    
+
+    CANNY_PRESETS = {
+        "canny_sensitive": dict(
+            low_thr=0.08,
+            high_thr=0.20,
+            thr_sharpness=12.0,
+            hyst_iters=3,
+            boundary_thresh=-0.5,
+        ),
+        "canny_medium": dict(
+            low_thr=0.12,
+            high_thr=0.30,
+            thr_sharpness=10.0,
+            hyst_iters=2,
+            boundary_thresh=0.0,
+        ),
+        "canny_default": dict(
+            low_thr=0.10,
+            high_thr=0.30,
+            thr_sharpness=20.0,
+            hyst_iters=2,
+            boundary_thresh=0.0,
+        ),
+    }
+
+    CANNY_KW = CANNY_PRESETS['canny_sensitive']
 
     for model_type in model_types:
 
@@ -193,11 +226,8 @@ def main():
         adaptive_encoder = RODSegAdaptivePatch(
             model_type=model_type,
             edge_mode=edge_mode,
-            boundary_thresh=boundary_thresh,
-            low_thr=low_thr,
-            high_thr=high_thr,
-            thr_sharpness=thr_sharpness,
-            hyst_iters=hyst_iters,
+            # boundary_thresh=boundary_thresh,
+            **CANNY_KW,
         ).to(device).eval()
 
         best_model_path = seghead_adaptive_patch_model_weight_chekpoint[model_type]
@@ -224,8 +254,17 @@ def main():
             seg_decoder = seg_decoder,
             device = device,
             model_type_name=model_type,
-            save_path_dir='output_ap_canny'
+            save_path_dir='code_2/output'
+            # save_path_dir='output_ap_canny'
         )
+
+    for model_t in total_result_summary.keys():
+        each_result = total_result_summary[model_t]
+        iou = each_result['IOU']
+        f1 =  each_result['F1']
+
+        print(f"{model_t}|| IOU: {iou:.4f}, F1: {f1:.4f}")
+
 
 
 def binary_f1(preds, targets, eps=1e-6):
@@ -329,8 +368,8 @@ def image_viz_canny(
 
             overlayed_origin_img = np.array(imgs[i].cpu())
             # print(preds[i].shape)
-            save_pred_image(pred_mask[i], dst_masking_image_save_path)
-            save_overlay_image(overlayed_origin_img ,pred_mask[i], save_path = dst_overlay_image_save_path)
+            # save_pred_image(pred_mask[i], dst_masking_image_save_path)
+            # save_overlay_image(overlayed_origin_img ,pred_mask[i], save_path = dst_overlay_image_save_path)
     
     dataset_size = len(loader.dataset)
     epoch_loss = running_loss / max(dataset_size, 1)
@@ -344,6 +383,8 @@ def image_viz_canny(
 
     print(f'Testing Time: {total_time:.2f} seconds, FPS: {fps:.2f}')
     print(f'Test Loss: {epoch_loss:.4f}, Test mIoU: {epoch_miou:.4f}, Test F1-score: {mean_test_f1:.4f}')
+
+    total_result_summary[model_type_name] = {'IOU':epoch_miou, "F1":mean_test_f1}
 
     # test_mean_loss = test_running_loss / len(ds)
     # test_miou = np.mean(test_iou_list) if test_iou_list else 0.0

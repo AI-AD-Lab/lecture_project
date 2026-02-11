@@ -4,3 +4,136 @@ IOU result || seghead:0.925, sobel:0.926, canny:0.925
 F1-score result || seghead:0.960, sobel:0.960, canny:0.960
 Maximun IOU diff: sobel-seghead:0.140, canny-seghead:0.247
 Maximun IOU diff image name: sobel-seghead:1623458379679.png, canny-seghead:1623458379679.png
+
+IOU result || seghead:0.925, sobel:0.926, canny:0.925
+F1-score result || seghead:0.960, sobel:0.960, canny:0.960
+Maximun IOU diff: sobel-seghead:0.140, canny-seghead:0.247
+Maximun IOU diff image name: sobel-seghead:1623458379679.png, canny-seghead:1623458379679.png
+Better Performance than Seghead: sobel win rate:0.554, canny win rate:0.554
+
+================================
+Loading checkpoint: 
+ seghead: ./ckpts_seghead/vit_l_best_val.pth 
+ sobel:./ckpts_ap_sobel/vit_l_best_val.pth, 
+ canny:./ckpts_ap_canny/260122/vit_l_best_val.pth 
+[testing] Loaded 2193 image pairs.
+IOU result || seghead:0.940, sobel:0.922, canny:0.943
+F1-score result || seghead:0.968, sobel:0.958, canny:0.970
+Maximun IOU diff: sobel-seghead:0.119, canny-seghead:0.191
+Maximun IOU diff image name: sobel-seghead:1620330283062.png, canny-seghead:1620330258938.png
+Better Performance than Seghead: sobel win rate:0.402, canny win rate:0.402
+
+Loading checkpoint: 
+ seghead: ./ckpts_seghead/vit_b_best_val.pth 
+ sobel:./ckpts_ap_sobel/vit_b_best_val.pth, 
+ canny:./ckpts_ap_canny/260122/vit_b_best_val.pth 
+[testing] Loaded 2193 image pairs.
+IOU result || seghead:0.935, sobel:0.931, canny:0.939
+F1-score result || seghead:0.966, sobel:0.963, canny:0.968
+Maximun IOU diff: sobel-seghead:0.069, canny-seghead:0.114
+Maximun IOU diff image name: sobel-seghead:1623175237655.png, canny-seghead:1620330257451.png
+Better Performance than Seghead: sobel win rate:0.591, canny win rate:0.591
+
+Loading checkpoint: 
+ seghead: ./ckpts_seghead/vits_best_val.pth 
+ sobel:./ckpts_ap_sobel/vits_best_val.pth, 
+ canny:./ckpts_ap_canny/260122_1/vits_best_val.pth 
+[testing] Loaded 2193 image pairs.
+IOU result || seghead:0.925, sobel:0.926, canny:0.925
+F1-score result || seghead:0.960, sobel:0.960, canny:0.960
+Maximun IOU diff: sobel-seghead:0.140, canny-seghead:0.247
+Maximun IOU diff image name: sobel-seghead:1623458379679.png, canny-seghead:1623458379679.png
+Better Performance than Seghead: sobel win rate:0.554, canny win rate:0.554
+
+Loading checkpoint: 
+ seghead: ./ckpts_seghead/vitt_best_val.pth 
+ sobel:./ckpts_ap_sobel/vitt_best_val.pth, 
+ canny:./ckpts_ap_canny/260122/vitt_best_val.pth 
+[testing] Loaded 2193 image pairs.
+IOU result || seghead:0.917, sobel:0.930, canny:0.930
+F1-score result || seghead:0.956, sobel:0.963, canny:0.963
+Maximun IOU diff: sobel-seghead:0.197, canny-seghead:0.147
+Maximun IOU diff image name: sobel-seghead:1623721579459.png, canny-seghead:1623458404783.png
+Better Performance than Seghead: sobel win rate:0.544, canny win rate:0.544
+
+
+
+
+
+**************************
+Loading checkpoint: 
+ seghead: ./ckpts_seghead/vit_h_best_val.pth 
+ sobel:./ckpts_ap_sobel/vit_h_best_val.pth, 
+ canny:./ckpts_ap_canny/260122/vit_h_best_val.pth 
+[testing] Loaded 2193 image pairs.
+viz: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1097/1097 [12:57<00:00,  1.41it/s]
+Model Type Name: vit_h
+IOU result || seghead:0.933, sobel:0.936, canny:0.932
+F1-score result || seghead:0.964, sobel:0.966, canny:0.964
+Maximun IOU diff: sobel-seghead:0.107, canny-seghead:0.153
+Maximun IOU diff image name: sobel-seghead:1623458400708.png, canny-seghead:1623458388917.png
+Better Performance than Seghead: sobel win rate:0.595, canny win rate:0.595
+Mean IOU over than Seghead: sobel:0.009, canny :0.013
+Mean IOU over than Seghead: sobel:-0.005, canny :-0.014
+-----------------------------------------------------------------------------------------------
+Loading checkpoint: 
+ seghead: ./ckpts_seghead/vit_l_best_val.pth 
+ sobel:./ckpts_ap_sobel/vit_l_best_val.pth, 
+ canny:./ckpts_ap_canny/260122/vit_l_best_val.pth 
+[testing] Loaded 2193 image pairs.
+viz: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1097/1097 [08:21<00:00,  2.19it/s]
+Model Type Name: vit_l
+IOU result || seghead:0.940, sobel:0.922, canny:0.943
+F1-score result || seghead:0.968, sobel:0.958, canny:0.970
+Maximun IOU diff: sobel-seghead:0.119, canny-seghead:0.191
+Maximun IOU diff image name: sobel-seghead:1620330283062.png, canny-seghead:1620330258938.png
+Better Performance than Seghead: sobel win rate:0.402, canny win rate:0.402
+Mean IOU over than Seghead: sobel:0.006, canny :0.010
+Mean IOU over than Seghead: sobel:-0.023, canny :-0.007
+-----------------------------------------------------------------------------------------------
+Loading checkpoint: 
+ seghead: ./ckpts_seghead/vit_b_best_val.pth 
+ sobel:./ckpts_ap_sobel/vit_b_best_val.pth, 
+ canny:./ckpts_ap_canny/260122/vit_b_best_val.pth 
+[testing] Loaded 2193 image pairs.
+viz: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1097/1097 [04:29<00:00,  4.08it/s]
+Model Type Name: vit_b
+IOU result || seghead:0.935, sobel:0.931, canny:0.939
+F1-score result || seghead:0.966, sobel:0.963, canny:0.968
+Maximun IOU diff: sobel-seghead:0.069, canny-seghead:0.114
+Maximun IOU diff image name: sobel-seghead:1623175237655.png, canny-seghead:1620330257451.png
+Better Performance than Seghead: sobel win rate:0.591, canny win rate:0.591
+Mean IOU over than Seghead: sobel:0.011, canny :0.014
+Mean IOU over than Seghead: sobel:-0.015, canny :-0.009
+-----------------------------------------------------------------------------------------------
+Loading checkpoint: 
+ seghead: ./ckpts_seghead/vits_best_val.pth 
+ sobel:./ckpts_ap_sobel/vits_best_val.pth, 
+ canny:./ckpts_ap_canny/260122_1/vits_best_val.pth 
+[testing] Loaded 2193 image pairs.
+viz: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1097/1097 [03:36<00:00,  5.07it/s]
+Model Type Name: vits
+IOU result || seghead:0.925, sobel:0.926, canny:0.925
+F1-score result || seghead:0.960, sobel:0.960, canny:0.960
+Maximun IOU diff: sobel-seghead:0.140, canny-seghead:0.247
+Maximun IOU diff image name: sobel-seghead:1623458379679.png, canny-seghead:1623458379679.png
+Better Performance than Seghead: sobel win rate:0.554, canny win rate:0.554
+Mean IOU over than Seghead: sobel:0.008, canny :0.017
+Mean IOU over than Seghead: sobel:-0.007, canny :-0.017
+-----------------------------------------------------------------------------------------------
+Loading checkpoint: 
+ seghead: ./ckpts_seghead/vitt_best_val.pth 
+ sobel:./ckpts_ap_sobel/vitt_best_val.pth, 
+ canny:./ckpts_ap_canny/260122/vitt_best_val.pth 
+[testing] Loaded 2193 image pairs.
+viz: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 1097/1097 [02:31<00:00,  7.25it/s]
+Model Type Name: vitt
+IOU result || seghead:0.917, sobel:0.930, canny:0.930
+F1-score result || seghead:0.956, sobel:0.963, canny:0.963
+Maximun IOU diff: sobel-seghead:0.197, canny-seghead:0.147
+Maximun IOU diff image name: sobel-seghead:1623721579459.png, canny-seghead:1623458404783.png
+Better Performance than Seghead: sobel win rate:0.544, canny win rate:0.544
+Mean IOU over than Seghead: sobel:0.021, canny :0.019
+Mean IOU over than Seghead: sobel:-0.008, canny :-0.007
+-----------------------------------------------------------------------------------------------
+root@981a54e340b1:/workspace# 

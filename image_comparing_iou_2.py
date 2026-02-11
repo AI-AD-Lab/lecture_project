@@ -178,29 +178,37 @@ def main():
 
     # basic seghead model weight path
     chkpt_seghead = {
-        'vit_h': './ckpts_seghead/vit_h_best_val.pth',
-        'vit_l': './ckpts_seghead/vit_l_best_val.pth',
-        'vit_b': './ckpts_seghead/vit_b_best_val.pth',
-        'vits': './ckpts_seghead/vits_best_val.pth',
-        'vitt': './ckpts_seghead/vitt_best_val.pth',  
+        'vit_h': './ckpts_2/260126_fixed/vit_h_canny_sensitive_best_val.pth',
+        'vit_l': './ckpts_2/260126_fixed/vit_l_canny_sensitive_best_val.pth',
+        'vit_b': './ckpts_2/260126_fixed/vit_b_canny_sensitive_best_val.pth',
+        'vits': './ckpts_2/260126_fixed/vits_canny_sensitive_best_val.pth',
+        'vitt': './ckpts_2/260126_fixed/vitt_canny_sensitive_best_val.pth',  
     }
 
     # Sobel ap patch model weight path
     chkpt_sobel_ap = {
-        'vit_h': './ckpts_ap_sobel/vit_h_best_val.pth',
-        'vit_l': './ckpts_ap_sobel/vit_l_best_val.pth',
-        'vit_b': './ckpts_ap_sobel/vit_b_best_val.pth',
-        'vits': './ckpts_ap_sobel/vits_best_val.pth',
-        'vitt': './ckpts_ap_sobel/vitt_best_val.pth',  
+        'vit_h': './ckpts_2/260112/vit_h_best_val.pth',
+        'vit_l': './ckpts_2/260112/vit_l_best_val.pth',
+        'vit_b': './ckpts_2/260112/vit_b_best_val.pth',
+        'vits': './ckpts_2/260112/vits_best_val.pth',
+        'vitt': './ckpts_2/260112/vitt_best_val.pth',  
     }
 
     # Canny ap patch model weight
+    # chkpt_canny_ap = {
+    #     'vit_h': './ckpts_2/260108/vit_h_best_val.pth',
+    #     'vit_l': './ckpts_2/260108/vit_l_best_val.pth',
+    #     'vit_b': './ckpts_2/260108/vit_b_best_val.pth',
+    #     'vits': './ckpts_2/260108/vits_best_val.pth',
+    #     'vitt': './ckpts_2/260108/vitt_best_val.pth',  
+    # }
+
     chkpt_canny_ap = {
-        'vit_h': './ckpts_ap_canny/260122/vit_h_best_val.pth',
-        'vit_l': './ckpts_ap_canny/260122/vit_l_best_val.pth',
-        'vit_b': './ckpts_ap_canny/260122/vit_b_best_val.pth',
-        'vits': './ckpts_ap_canny/260122_1/vits_best_val.pth',
-        'vitt': './ckpts_ap_canny/260122/vitt_best_val.pth',  
+    'vit_h': './ckpts_2/260121_canny_default/vit_h_canny_default_best_val.pth',
+    'vit_l': './ckpts_2/260121_canny_default/vit_l_canny_default_best_val.pth',
+    'vit_b': './ckpts_2/260121_canny_default/vit_b_canny_default_best_val.pth',
+    'vits': './ckpts_2/260121_canny_default/vits_canny_default_best_val.pth',
+    'vitt': './ckpts_2/260121_canny_default/vitt_canny_default_best_val.pth',  
     }
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -414,7 +422,7 @@ def main():
         print(f"Maximun IOU diff image name: sobel-seghead:{max_diff_sobel_img_name}, canny-seghead:{max_diff_canny_img_name}")
         print(f"Better Performance than Seghead: sobel win rate:{sobel_win_rate:.3f}, canny win rate:{canny_win_rate:.3f}")
         print(f"Mean IOU over than Seghead: sobel:{sobel_over_mean:.3f}, canny :{canny_over_mean:.3f}")
-        print(f"Mean IOU over than Seghead: sobel:{sobel_under_mean:.3f}, canny :{canny_under_mean:.3f}")
+        print(f"Mean IOU less than Seghead: sobel:{sobel_under_mean:.3f}, canny :{canny_under_mean:.3f}")
         print("-----------------------------------------------------------------------------------------------")
 
 if __name__ == "__main__":
